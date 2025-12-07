@@ -44,31 +44,48 @@ const PALETTE = {
 const SOUND_BANDS = [
   {
     id: 'low',
-    label: 'Low Hum Band',
-    range: [50, 150],
-    tone: 'Colony calm and clustered. Maintain ventilation.',
+    label: 'Low Frequency Hum',
+    range: [50, 200],
+    tone: 'Dull humming indicates colony is calm and clustered. Normal baseline activity. Maintain proper ventilation and check hive entrance is clear.',
+    instructions: 'No action needed. This is normal baseline activity. Monitor temperature and humidity levels.',
     accent: PALETTE.amber,
+    alert: false,
   },
   {
     id: 'activity',
     label: 'Activity Buzz Band',
-    range: [150, 300],
-    tone: 'Workers active. Ensure nectar and brood frames are balanced.',
+    range: [200, 300],
+    tone: 'Stable hum with baseline spectrum. Rhythmical ventilation sounds indicate healthy worker activity. Lower frequency hum suggests normal foraging and brood care.',
+    instructions: 'Colony is healthy and active. Ensure adequate food stores and check brood frames for proper development. Monitor for consistent patterns.',
     accent: PALETTE.gold,
+    alert: false,
   },
   {
-    id: 'communication',
-    label: 'Communication Queen Band',
-    range: [300, 600],
-    tone: 'Queen piping or waggle signals. Inspect queen cells soon.',
+    id: 'queen',
+    label: 'Queen Communication',
+    range: [300, 500],
+    tone: 'Higher amplitude with structured tonal signals. Strong broadband indicates distinct queen cues and piping. May signal queen presence or swarming preparation.',
+    instructions: 'Monitor closely for swarming behavior. Inspect for queen cells and check queen health. Ensure adequate space in hive to prevent swarming.',
     accent: PALETTE.orange,
+    alert: true,
   },
   {
-    id: 'stress',
-    label: 'Intrusion or Stress',
-    range: [600, 1000],
-    tone: 'Possible predator, robbing, or overheating. Open hive gently and investigate.',
+    id: 'irregular',
+    label: 'High Frequency Buzzing',
+    range: [500, 700],
+    tone: 'Irregular high frequency buzzing may indicate disturbance, robbing attempts, or colony stress. Monitor for patterns of agitation.',
+    instructions: 'Investigate potential disturbances. Check for robbing activity, predators, or environmental stressors. Approach hive carefully and observe from distance first.',
+    accent: PALETTE.orange,
+    alert: true,
+  },
+  {
+    id: 'defensive',
+    label: 'Defensive Sounds',
+    range: [700, Infinity],
+    tone: 'Hissing and high frequency defensive sounds indicate colony is alarmed. Possible threats include predators, robbing, or severe environmental stress.',
+    instructions: 'URGENT: Colony is in defensive mode. Do not approach immediately. Identify threat from safe distance. Check for robbing, predators, or extreme temperature. Wait for sounds to subside before inspection.',
     accent: PALETTE.red,
+    alert: true,
   },
 ]
 
@@ -278,8 +295,15 @@ function App() {
 
   const soundBand = useMemo(() => {
     if (!latest?.sound_value) return null
+    const value = latest.sound_value
+    // Handle the last band which has Infinity as upper bound
     return SOUND_BANDS.find(
-      band => latest.sound_value >= band.range[0] && latest.sound_value < band.range[1],
+      band => {
+        if (band.range[1] === Infinity) {
+          return value >= band.range[0]
+        }
+        return value >= band.range[0] && value < band.range[1]
+      }
     )
   }, [latest])
 
@@ -310,7 +334,7 @@ function App() {
   const showSplash = !isReady || (!latest && !error)
 
   const alertBand =
-    soundBand && (soundBand.id === 'communication' || soundBand.id === 'stress')
+    soundBand && soundBand.alert
       ? soundBand
       : null
 
@@ -355,14 +379,14 @@ function App() {
           icon="🌡️"
         />
         <StatCard
-          label="Humidity"
+          label="Humidity" 
           value={latest?.humidity ?? '—'}
           suffix="%"
           trend={calculateTrend(readings.map(r => r.humidity))}
           icon="💧"
         />
         <StatCard
-          label="Sound Energy"
+          label="Sound Frequency"
           value={latest?.sound_value ?? '—'}
           suffix="Hz"
           trend={calculateTrend(readings.map(r => r.sound_value))}
@@ -382,7 +406,7 @@ function App() {
         <ChartPanel title="Humidity %" dataset={humidityChart} color={PALETTE.teal} isMobile={isMobile} />
         <div className="chart-panel waveform">
           <div className="chart-panel__header">
-            <h3>Sound Waveform</h3>
+            <h3>Sound Waveform Hz</h3>
             {soundBand && <span style={{ color: soundBand.accent }}>{soundBand.label}</span>}
           </div>
           <div className="chart-wrapper">
@@ -390,7 +414,7 @@ function App() {
               options={{
                 responsive: true,
                 maintainAspectRatio: true,
-                aspectRatio: isMobile ? 2.5 : 3.5,
+                aspectRatio: isMobile ? 1.8 : 2.2,
                 tension: 0.35,
                 interaction: {
                   intersect: false,
@@ -398,15 +422,44 @@ function App() {
                 },
                 plugins: {
                   legend: { display: false },
-                  tooltip: { enabled: false },
+                  tooltip: {
+                    backgroundColor: 'rgba(15,15,21,0.95)',
+                    padding: isMobile ? 8 : 12,
+                    titleFont: { 
+                      family: 'system-ui, sans-serif',
+                      size: isMobile ? 11 : 13,
+                    },
+                    bodyFont: { 
+                      family: 'system-ui, sans-serif',
+                      size: isMobile ? 11 : 12,
+                    },
+                    cornerRadius: 8,
+                    displayColors: false,
+                    callbacks: {
+                      label: (context) => {
+                        return `Frequency: ${context.parsed.y.toFixed(0)} Hz`
+                      }
+                    }
+                  },
                 },
                 scales: {
                   y: {
-                    ticks: { display: false },
-                    grid: { display: false },
+                    ticks: { 
+                      color: 'var(--bee-text-muted)',
+                      font: { size: isMobile ? 10 : 11 },
+                      maxTicksLimit: isMobile ? 5 : 7,
+                      callback: function(value) {
+                        return value.toFixed(0) + ' Hz'
+                      }
+                    },
+                    grid: { color: 'rgba(255,255,255,0.06)' },
                   },
                   x: {
-                    ticks: { display: false },
+                    ticks: { 
+                      color: 'var(--bee-text-muted)',
+                      font: { size: isMobile ? 9 : 10 },
+                      maxTicksLimit: isMobile ? 6 : 10,
+                    },
                     grid: { display: false },
                   },
                 },
@@ -424,6 +477,7 @@ function App() {
                       below: 'rgba(255,191,0,0.25)',
                     },
                     pointRadius: 0,
+                    pointHoverRadius: isMobile ? 3 : 4,
                   },
                 ],
               }}
@@ -446,7 +500,7 @@ function App() {
               <header>
                 <h4>{band.label}</h4>
                 <span>
-                  {band.range[0]} - {band.range[1]} Hz
+                  {band.range[0]} - {band.range[1] === Infinity ? '700+' : band.range[1]} Hz
                 </span>
               </header>
               <p>{band.tone}</p>
@@ -464,13 +518,23 @@ function App() {
             animate={{ opacity: 1, translateY: 0 }}
             exit={{ opacity: 0, translateY: 30 }}
           >
-            <strong>{alertBand.label} alert</strong>
-            <p>{alertBand.tone}</p>
+            <div className="alert-pop__header">
+              <strong>{alertBand.label} Alert</strong>
+              <span className="alert-pop__value">
+                {latest?.sound_value?.toFixed(0) ?? '—'} Hz
+              </span>
+            </div>
+            <p className="alert-pop__description">{alertBand.tone}</p>
+            <div className="alert-pop__instructions">
+              <strong>Recommended Action:</strong>
+              <p>{alertBand.instructions}</p>
+            </div>
             <button
               type="button"
+              className="alert-pop__button"
               onClick={() => window.open('https://bee-health.com/management', '_blank')}
             >
-              Show Response Playbook
+              View Detailed Response Guide
             </button>
           </motion.div>
         )}
